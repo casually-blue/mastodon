@@ -8,10 +8,8 @@ import classNames from 'classnames';
 import ImmutablePropTypes from 'react-immutable-proptypes';
 import ImmutablePureComponent from 'react-immutable-pure-component';
 
-import { ReactComponent as LockIcon } from '@material-symbols/svg-600/outlined/lock.svg';
 import { length } from 'stringz';
 
-import { Icon }  from 'mastodon/components/icon';
 import { WithOptionalRouterPropTypes, withOptionalRouter } from 'mastodon/utils/react_router';
 
 import AutosuggestInput from '../../../components/autosuggest_input';
@@ -35,10 +33,9 @@ const allowedAroundShortCode = '><\u0085\u0020\u00a0\u1680\u2000\u2001\u2002\u20
 
 const messages = defineMessages({
   placeholder: { id: 'compose_form.placeholder', defaultMessage: 'What is on your mind?' },
-  spoiler_placeholder: { id: 'compose_form.spoiler_placeholder', defaultMessage: 'Write your warning here' },
-  publish: { id: 'compose_form.publish', defaultMessage: 'Publish' },
-  publishLoud: { id: 'compose_form.publish_loud', defaultMessage: '{publish}!' },
-  saveChanges: { id: 'compose_form.save_changes', defaultMessage: 'Save changes' },
+  spoiler_placeholder: { id: 'compose_form.spoiler_placeholder', defaultMessage: 'Content warning' },
+  publish: { id: 'compose_form.publish', defaultMessage: 'Post' },
+  saveChanges: { id: 'compose_form.save_changes', defaultMessage: 'Save' },
 });
 
 class ComposeForm extends ImmutablePureComponent {
@@ -227,16 +224,6 @@ class ComposeForm extends ImmutablePureComponent {
     const { highlighted } = this.state;
     const disabled = this.props.isSubmitting;
 
-    let publishText = '';
-
-    if (this.props.isEditing) {
-      publishText = intl.formatMessage(messages.saveChanges);
-    } else if (this.props.privacy === 'private' || this.props.privacy === 'direct') {
-      publishText = <><Icon id='lock' icon={LockIcon} /> {intl.formatMessage(messages.publish)}</>;
-    } else {
-      publishText = this.props.privacy !== 'unlisted' ? intl.formatMessage(messages.publishLoud, { publish: intl.formatMessage(messages.publish) }) : intl.formatMessage(messages.publish);
-    }
-
     return (
       <form className='compose-form' onSubmit={this.handleSubmit}>
         <WarningContainer />
@@ -296,19 +283,12 @@ class ComposeForm extends ImmutablePureComponent {
               <LanguageDropdown />
             </div>
 
-            <div className='character-counter__wrapper'>
-              <CharacterCounter max={500} text={this.getFulltextForCharacterCounting()} />
-            </div>
-          </div>
-        </div>
+            <CharacterCounter max={500} text={this.getFulltextForCharacterCounting()} />
 
-        <div className='compose-form__publish'>
-          <div className='compose-form__publish-button-wrapper'>
             <Button
               type='submit'
-              text={publishText}
+              text={intl.formatMessage(this.props.isEditing ? messages.saveChanges : messages.publish)}
               disabled={!this.canSubmit()}
-              block
             />
           </div>
         </div>

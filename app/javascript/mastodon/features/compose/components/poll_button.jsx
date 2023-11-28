@@ -3,7 +3,7 @@ import { PureComponent } from 'react';
 
 import { defineMessages, injectIntl } from 'react-intl';
 
-import { ReactComponent as InsertChartIcon } from '@material-symbols/svg-600/outlined/insert_chart.svg';
+import { ReactComponent as ListAltIcon } from '@material-symbols/svg-600/outlined/list_alt.svg';
 
 import { IconButton } from '../../../components/icon_button';
 
@@ -43,7 +43,7 @@ class PollButton extends PureComponent {
       <div className='compose-form__poll-button'>
         <IconButton
           icon='tasks'
-          iconComponent={InsertChartIcon}
+          iconComponent={ListAltIcon}
           title={intl.formatMessage(active ? messages.remove_poll : messages.add_poll)}
           disabled={disabled}
           onClick={this.handleClick}

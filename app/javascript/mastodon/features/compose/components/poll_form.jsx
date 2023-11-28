@@ -16,9 +16,9 @@ import { Icon }  from 'mastodon/components/icon';
 import { IconButton } from 'mastodon/components/icon_button';
 
 const messages = defineMessages({
-  option_placeholder: { id: 'compose_form.poll.option_placeholder', defaultMessage: 'Choice {number}' },
-  add_option: { id: 'compose_form.poll.add_option', defaultMessage: 'Add a choice' },
-  remove_option: { id: 'compose_form.poll.remove_option', defaultMessage: 'Remove this choice' },
+  option_placeholder: { id: 'compose_form.poll.option_placeholder', defaultMessage: 'Option {number}' },
+  add_option: { id: 'compose_form.poll.add_option', defaultMessage: 'Add option' },
+  remove_option: { id: 'compose_form.poll.remove_option', defaultMessage: 'Remove this option' },
   poll_duration: { id: 'compose_form.poll.duration', defaultMessage: 'Poll duration' },
   switchToMultiple: { id: 'compose_form.poll.switch_to_multiple', defaultMessage: 'Change poll to allow multiple choices' },
   switchToSingle: { id: 'compose_form.poll.switch_to_single', defaultMessage: 'Change poll to allow for a single choice' },
