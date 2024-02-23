@@ -11,6 +11,7 @@
 #  spoiler_text                 :text             default(""), not null
 #  created_at                   :datetime         not null
 #  updated_at                   :datetime         not null
+#  content_type                 :string
 #  ordered_media_attachment_ids :bigint(8)        is an Array
 #  media_descriptions           :text             is an Array
 #  poll_options                 :string           is an Array
@@ -39,7 +40,7 @@ class StatusEdit < ApplicationRecord
   belongs_to :status
   belongs_to :account, optional: true
 
-  default_scope { order(id: :asc) }
+  scope :ordered, -> { order(id: :asc) }
 
   delegate :local?, :application, :edited?, :edited_at,
            :discarded?, :visibility, to: :status

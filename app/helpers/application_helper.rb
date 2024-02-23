@@ -91,6 +91,14 @@ module ApplicationHelper
     end
   end
 
+  def html_title
+    safe_join(
+      [content_for(:page_title).to_s.chomp, title]
+      .select(&:present?),
+      ' - '
+    )
+  end
+
   def title
     Rails.env.production? ? site_title : "#{site_title} (Dev)"
   end
@@ -102,11 +110,11 @@ module ApplicationHelper
   def can?(action, record)
     return false if record.nil?
 
-    policy(record).public_send("#{action}?")
+    policy(record).public_send(:"#{action}?")
   end
 
   def fa_icon(icon, attributes = {})
-    class_names = attributes[:class]&.split(' ') || []
+    class_names = attributes[:class]&.split || []
     class_names << 'fa'
     class_names += icon.split.map { |cl| "fa-#{cl}" }
 
@@ -153,7 +161,8 @@ module ApplicationHelper
 
   def body_classes
     output = body_class_string.split
-    output << "theme-#{current_theme.parameterize}"
+    output << "flavour-#{current_flavour.parameterize}"
+    output << "skin-#{current_skin.parameterize}"
     output << 'system-font' if current_account&.user&.setting_system_font_ui
     output << (current_account&.user&.setting_reduce_motion ? 'reduce-motion' : 'no-reduce-motion')
     output << 'rtl' if locale_direction == 'rtl'

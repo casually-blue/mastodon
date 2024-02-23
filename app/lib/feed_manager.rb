@@ -45,6 +45,8 @@ class FeedManager
       filter_from_list?(status, receiver) || filter_from_home?(status, receiver.account_id, build_crutches(receiver.account_id, [status]), :list)
     when :mentions
       filter_from_mentions?(status, receiver.id)
+    when :direct
+      filter_from_direct?(status, receiver.id)
     when :tags
       filter_from_tags?(status, receiver.id, build_crutches(receiver.id, [status]))
     else
@@ -99,6 +101,29 @@ class FeedManager
     return false unless remove_from_feed(:list, list.id, status, aggregate_reblogs: list.account.user&.aggregates_reblogs?)
 
     redis.publish("timeline:list:#{list.id}", Oj.dump(event: :delete, payload: status.id.to_s)) unless update
+    true
+  end
+
+  # Add a status to a linear direct message feed and send a streaming API update
+  # @param [Account] account
+  # @param [Status] status
+  # @return [Boolean]
+  def push_to_direct(account, status, update: false)
+    return false unless add_to_feed(:direct, account.id, status)
+
+    trim(:direct, account.id)
+    PushUpdateWorker.perform_async(account.id, status.id, "timeline:direct:#{account.id}") unless update
+    true
+  end
+
+  # Remove a status from a linear direct message feed and send a streaming API update
+  # @param [List] list
+  # @param [Status] status
+  # @return [Boolean]
+  def unpush_from_direct(account, status, update: false)
+    return false unless remove_from_feed(:direct, account.id, status)
+
+    redis.publish("timeline:direct:#{account.id}", Oj.dump(event: :delete, payload: status.id.to_s)) unless update
     true
   end
 
@@ -246,7 +271,7 @@ class FeedManager
   # @param [Account] target_account
   # @return [void]
   def clear_from_lists(account, target_account)
-    List.where(account: account).each do |list|
+    List.where(account: account).find_each do |list|
       clear_from_list(list, target_account)
     end
   end
@@ -284,6 +309,31 @@ class FeedManager
       end
 
       trim(:home, account.id)
+    end
+  end
+
+  # Populate direct feed of account from scratch
+  # @param [Account] account
+  # @return [void]
+  def populate_direct_feed(account)
+    added  = 0
+    limit  = FeedManager::MAX_ITEMS / 2
+    max_id = nil
+
+    loop do
+      statuses = Status.as_direct_timeline(account, limit, max_id)
+
+      break if statuses.empty?
+
+      statuses.each do |status|
+        next if filter_from_direct?(status, account)
+
+        added += 1 if add_to_feed(:direct, account.id, status)
+      end
+
+      break unless added.zero?
+
+      max_id = statuses.last.id
     end
   end
 
@@ -420,10 +470,20 @@ class FeedManager
     check_for_blocks = status.active_mentions.pluck(:account_id)
     check_for_blocks.push(status.in_reply_to_account) if status.reply? && !status.in_reply_to_account_id.nil?
 
-    should_filter   = blocks_or_mutes?(receiver_id, check_for_blocks, :mentions)                                                         # Filter if it's from someone I blocked, in reply to someone I blocked, or mentioning someone I blocked (or muted)
-    should_filter ||= (status.account.silenced? && !Follow.where(account_id: receiver_id, target_account_id: status.account_id).exists?) # of if the account is silenced and I'm not following them
+    should_filter   = blocks_or_mutes?(receiver_id, check_for_blocks, :mentions) # Filter if it's from someone I blocked, in reply to someone I blocked, or mentioning someone I blocked (or muted)
+    should_filter ||= status.account.silenced? && !Follow.exists?(account_id: receiver_id, target_account_id: status.account_id) # Filter if the account is silenced and I'm not following them
 
     should_filter
+  end
+
+  # Check if status should not be added to the linear direct message feed
+  # @param [Status] status
+  # @param [Integer] receiver_id
+  # @return [Boolean]
+  def filter_from_direct?(status, receiver_id)
+    return false if receiver_id == status.account_id
+
+    filter_from_mentions?(status, receiver_id)
   end
 
   # Check if status should not be added to the list feed
@@ -434,7 +494,7 @@ class FeedManager
     if status.reply? && status.in_reply_to_account_id != status.account_id
       should_filter = status.in_reply_to_account_id != list.account_id
       should_filter &&= !list.show_followed?
-      should_filter &&= !(list.show_list? && ListAccount.where(list_id: list.id, account_id: status.in_reply_to_account_id).exists?)
+      should_filter &&= !(list.show_list? && ListAccount.exists?(list_id: list.id, account_id: status.in_reply_to_account_id))
 
       return !!should_filter
     end
@@ -551,7 +611,7 @@ class FeedManager
   def build_crutches(receiver_id, statuses)
     crutches = {}
 
-    crutches[:active_mentions] = Mention.active.where(status_id: statuses.flat_map { |s| [s.id, s.reblog_of_id] }.compact).pluck(:status_id, :account_id).each_with_object({}) { |(id, account_id), mapping| (mapping[id] ||= []).push(account_id) }
+    crutches[:active_mentions] = crutches_active_mentions(statuses)
 
     check_for_blocks = statuses.flat_map do |s|
       arr = crutches[:active_mentions][s.id] || []
@@ -577,5 +637,13 @@ class FeedManager
     crutches[:exclusive_list_users] = ListAccount.where(list: lists, account_id: statuses.map(&:account_id)).pluck(:account_id).index_with(true)
 
     crutches
+  end
+
+  def crutches_active_mentions(statuses)
+    Mention
+      .active
+      .where(status_id: statuses.flat_map { |status| [status.id, status.reblog_of_id] }.compact)
+      .pluck(:status_id, :account_id)
+      .each_with_object({}) { |(id, account_id), mapping| (mapping[id] ||= []).push(account_id) }
   end
 end

@@ -53,6 +53,7 @@ class FanOutOnWriteService < BaseService
     else
       deliver_to_mentioned_followers!
       deliver_to_conversation!
+      deliver_to_direct_timelines!
     end
   end
 
@@ -67,12 +68,22 @@ class FanOutOnWriteService < BaseService
 
   def deliver_to_self!
     FeedManager.instance.push_to_home(@account, @status, update: update?) if @account.local?
+    FeedManager.instance.push_to_direct(@account, @status, update: update?) if @account.local? && @status.direct_visibility?
   end
 
   def notify_mentioned_accounts!
     @status.active_mentions.where.not(id: @options[:silenced_account_ids] || []).joins(:account).merge(Account.local).select(:id, :account_id).reorder(nil).find_in_batches do |mentions|
       LocalNotificationWorker.push_bulk(mentions) do |mention|
         [mention.account_id, mention.id, 'Mention', 'mention']
+      end
+
+      next unless update?
+
+      # This may result in duplicate update payloads, but this ensures clients
+      # are aware of edits to posts only appearing in mention notifications
+      # (e.g. private mentions or mentions by people they do not follow)
+      PushUpdateWorker.push_bulk(mentions.filter { |mention| subscribed_to_streaming_api?(mention.account_id) }) do |mention|
+        [mention.account_id, @status.id, "timeline:#{mention.account_id}:notifications", { 'update' => true }]
       end
     end
   end
@@ -117,6 +128,12 @@ class FanOutOnWriteService < BaseService
     end
   end
 
+  def deliver_to_direct_timelines!
+    FeedInsertWorker.push_bulk(@status.mentions.includes(:account).map(&:account).select(&:local?)) do |account|
+      [@status.id, account.id, 'direct', { 'update' => update? }]
+    end
+  end
+
   def broadcast_to_hashtag_streams!
     @status.tags.map(&:name).each do |hashtag|
       redis.publish("timeline:hashtag:#{hashtag.mb_chars.downcase}", anonymous_payload)
@@ -125,7 +142,7 @@ class FanOutOnWriteService < BaseService
   end
 
   def broadcast_to_public_streams!
-    return if @status.reply? && @status.in_reply_to_account_id != @account.id
+    return if @status.reply? && @status.in_reply_to_account_id != @account.id && !Setting.show_replies_in_public_timelines
 
     redis.publish('timeline:public', anonymous_payload)
     redis.publish(@status.local? ? 'timeline:public:local' : 'timeline:public:remote', anonymous_payload)
@@ -160,6 +177,10 @@ class FanOutOnWriteService < BaseService
   end
 
   def broadcastable?
-    @status.public_visibility? && !@status.reblog? && !@account.silenced?
+    @status.public_visibility? && !@account.silenced? && (!@status.reblog? || Setting.show_reblogs_in_public_timelines)
+  end
+
+  def subscribed_to_streaming_api?(account_id)
+    redis.exists?("subscribed:timeline:#{account_id}") || redis.exists?("subscribed:timeline:#{account_id}:notifications")
   end
 end

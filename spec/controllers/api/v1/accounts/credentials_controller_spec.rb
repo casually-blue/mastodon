@@ -41,11 +41,9 @@ describe Api::V1::Accounts::CredentialsController do
           }
         end
 
-        it 'returns http success' do
+        it 'updates account info', :aggregate_failures do
           expect(response).to have_http_status(200)
-        end
 
-        it 'updates account info' do
           user.reload
           user.account.reload
 
@@ -55,9 +53,7 @@ describe Api::V1::Accounts::CredentialsController do
           expect(user.account.header).to exist
           expect(user.setting_default_privacy).to eq('unlisted')
           expect(user.setting_default_sensitive).to be(true)
-        end
 
-        it 'queues up an account update distribution' do
           expect(ActivityPub::UpdateDistributionWorker).to have_received(:perform_async).with(user.account_id)
         end
       end
@@ -75,9 +71,11 @@ describe Api::V1::Accounts::CredentialsController do
         end
       end
 
-      describe 'with invalid data' do
+      describe 'with a too long profile bio' do
         before do
-          patch :update, params: { note: 'This is too long. ' * 30 }
+          note = 'This is too long. '
+          note += 'a' * (Account::MAX_NOTE_LENGTH - note.length + 1)
+          patch :update, params: { note: note }
         end
 
         it 'returns http unprocessable entity' do

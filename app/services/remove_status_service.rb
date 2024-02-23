@@ -44,6 +44,7 @@ class RemoveStatusService < BaseService
         remove_from_hashtags
         remove_from_public
         remove_from_media if @status.with_media?
+        remove_from_direct if status.direct_visibility?
         remove_media
       end
 
@@ -58,6 +59,7 @@ class RemoveStatusService < BaseService
 
   def remove_from_self
     FeedManager.instance.unpush_from_home(@account, @status)
+    FeedManager.instance.unpush_from_direct(@account, @status) if @status.direct_visibility?
   end
 
   def remove_from_followers
@@ -114,7 +116,7 @@ class RemoveStatusService < BaseService
   end
 
   def remove_from_hashtags
-    @account.featured_tags.where(tag_id: @status.tags.map(&:id)).each do |featured_tag|
+    @account.featured_tags.where(tag_id: @status.tags.map(&:id)).find_each do |featured_tag|
       featured_tag.decrement(@status.id)
     end
 
@@ -144,6 +146,12 @@ class RemoveStatusService < BaseService
 
     redis.publish('timeline:public:media', @payload)
     redis.publish(@status.local? ? 'timeline:public:local:media' : 'timeline:public:remote:media', @payload)
+  end
+
+  def remove_from_direct
+    @status.active_mentions.each do |mention|
+      FeedManager.instance.unpush_from_direct(mention.account, @status) if mention.account.local?
+    end
   end
 
   def remove_media

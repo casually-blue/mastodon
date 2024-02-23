@@ -1,11 +1,11 @@
-import { createRoot }  from 'react-dom/client';
-
 import './public-path';
+
+import { createRoot }  from 'react-dom/client';
 
 import { IntlMessageFormat }  from 'intl-messageformat';
 import { defineMessages } from 'react-intl';
 
-import { delegate }  from '@rails/ujs';
+import Rails from '@rails/ujs';
 import axios from 'axios';
 import { throttle } from 'lodash';
 
@@ -25,22 +25,6 @@ const messages = defineMessages({
   usernameTaken: { id: 'username.taken', defaultMessage: 'That username is taken. Try another' },
   passwordExceedsLength: { id: 'password_confirmation.exceeds_maxlength', defaultMessage: 'Password confirmation exceeds the maximum password length' },
   passwordDoesNotMatch: { id: 'password_confirmation.mismatching', defaultMessage: 'Password confirmation does not match' },
-});
-
-window.addEventListener('message', e => {
-  const data = e.data || {};
-
-  if (!window.parent || data.type !== 'setHeight') {
-    return;
-  }
-
-  ready(() => {
-    window.parent.postMessage({
-      type: 'setHeight',
-      id: data.id,
-      height: document.getElementsByTagName('html')[0].scrollHeight,
-    }, '*');
-  });
 });
 
 function loaded() {
@@ -145,7 +129,7 @@ function loaded() {
       });
   }
 
-  delegate(document, '#user_account_attributes_username', 'input', throttle(({ target }) => {
+  Rails.delegate(document, '#user_account_attributes_username', 'input', throttle(({ target }) => {
     if (target.value && target.value.length > 0) {
       axios.get('/api/v1/accounts/lookup', { params: { acct: target.value } }).then(() => {
         target.setCustomValidity(formatMessage(messages.usernameTaken));
@@ -157,7 +141,7 @@ function loaded() {
     }
   }, 500, { leading: false, trailing: true }));
 
-  delegate(document, '#user_password,#user_password_confirmation', 'input', () => {
+  Rails.delegate(document, '#user_password,#user_password_confirmation', 'input', () => {
     const password = document.getElementById('user_password');
     const confirmation = document.getElementById('user_password_confirmation');
     if (!confirmation) return;
@@ -171,7 +155,7 @@ function loaded() {
     }
   });
 
-  delegate(document, '.status__content__spoiler-link', 'click', function() {
+  Rails.delegate(document, '.status__content__spoiler-link', 'click', function() {
     const statusEl = this.parentNode.parentNode;
 
     if (statusEl.dataset.spoiler === 'expanded') {
@@ -192,46 +176,6 @@ function loaded() {
   });
 }
 
-delegate(document, '#edit_profile input[type=file]', 'change', ({ target }) => {
-  const avatar = document.getElementById(target.id + '-preview');
-  const [file] = target.files || [];
-  const url = file ? URL.createObjectURL(file) : avatar.dataset.originalSrc;
-
-  avatar.src = url;
-});
-
-delegate(document, '.input-copy input', 'click', ({ target }) => {
-  target.focus();
-  target.select();
-  target.setSelectionRange(0, target.value.length);
-});
-
-delegate(document, '.input-copy button', 'click', ({ target }) => {
-  const input = target.parentNode.querySelector('.input-copy__wrapper input');
-
-  const oldReadOnly = input.readonly;
-
-  input.readonly = false;
-  input.focus();
-  input.select();
-  input.setSelectionRange(0, input.value.length);
-
-  try {
-    if (document.execCommand('copy')) {
-      input.blur();
-      target.parentNode.classList.add('copied');
-
-      setTimeout(() => {
-        target.parentNode.classList.remove('copied');
-      }, 700);
-    }
-  } catch (err) {
-    console.error(err);
-  }
-
-  input.readonly = oldReadOnly;
-});
-
 const toggleSidebar = () => {
   const sidebar = document.querySelector('.sidebar ul');
   const toggleButton = document.querySelector('.sidebar__toggle__icon');
@@ -248,23 +192,23 @@ const toggleSidebar = () => {
   sidebar.classList.toggle('visible');
 };
 
-delegate(document, '.sidebar__toggle__icon', 'click', () => {
+Rails.delegate(document, '.sidebar__toggle__icon', 'click', () => {
   toggleSidebar();
 });
 
-delegate(document, '.sidebar__toggle__icon', 'keydown', e => {
+Rails.delegate(document, '.sidebar__toggle__icon', 'keydown', e => {
   if (e.key === ' ' || e.key === 'Enter') {
     e.preventDefault();
     toggleSidebar();
   }
 });
 
-delegate(document, '.custom-emoji', 'mouseover', ({ target }) => target.src = target.getAttribute('data-original'));
-delegate(document, '.custom-emoji', 'mouseout', ({ target }) => target.src = target.getAttribute('data-static'));
+Rails.delegate(document, '.custom-emoji', 'mouseover', ({ target }) => target.src = target.getAttribute('data-original'));
+Rails.delegate(document, '.custom-emoji', 'mouseout', ({ target }) => target.src = target.getAttribute('data-static'));
 
 // Empty the honeypot fields in JS in case something like an extension
 // automatically filled them.
-delegate(document, '#registration_new_user,#new_user', 'submit', () => {
+Rails.delegate(document, '#registration_new_user,#new_user', 'submit', () => {
   ['user_website', 'user_confirm_password', 'registration_user_website', 'registration_user_confirm_password'].forEach(id => {
     const field = document.getElementById(id);
     if (field) {

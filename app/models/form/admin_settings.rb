@@ -16,21 +16,29 @@ class Form::AdminSettings
     closed_registrations_message
     timeline_preview
     bootstrap_timeline_accounts
-    theme
+    flavour
+    skin
     activity_api_enabled
     peers_api_enabled
     preview_sensitive_media
     custom_css
     profile_directory
+    hide_followers_count
+    flavour_and_skin
     thumbnail
     mascot
+    show_reblogs_in_public_timelines
+    show_replies_in_public_timelines
     trends
     trends_as_landing_page
     trendable_by_default
+    trending_status_cw
     show_domain_blocks
     show_domain_blocks_rationale
     noindex
+    outgoing_spoilers
     require_invite_text
+    captcha_enabled
     media_cache_retention_period
     content_cache_retention_period
     backups_retention_period
@@ -51,9 +59,13 @@ class Form::AdminSettings
     peers_api_enabled
     preview_sensitive_media
     profile_directory
+    hide_followers_count
+    show_reblogs_in_public_timelines
+    show_replies_in_public_timelines
     trends
     trends_as_landing_page
     trendable_by_default
+    trending_status_cw
     noindex
     require_invite_text
     captcha_enabled
@@ -63,6 +75,10 @@ class Form::AdminSettings
   UPLOAD_KEYS = %i(
     thumbnail
     mascot
+  ).freeze
+
+  PSEUDO_KEYS = %i(
+    flavour_and_skin
   ).freeze
 
   OVERRIDEN_SETTINGS = {
@@ -84,7 +100,7 @@ class Form::AdminSettings
 
   KEYS.each do |key|
     define_method(key) do
-      return instance_variable_get("@#{key}") if instance_variable_defined?("@#{key}")
+      return instance_variable_get(:"@#{key}") if instance_variable_defined?(:"@#{key}")
 
       stored_value = if UPLOAD_KEYS.include?(key)
                        SiteUpload.where(var: key).first_or_initialize(var: key)
@@ -94,12 +110,12 @@ class Form::AdminSettings
                        Setting.public_send(key)
                      end
 
-      instance_variable_set("@#{key}", stored_value)
+      instance_variable_set(:"@#{key}", stored_value)
     end
   end
 
   UPLOAD_KEYS.each do |key|
-    define_method("#{key}=") do |file|
+    define_method(:"#{key}=") do |file|
       value = public_send(key)
       value.file = file
     rescue Mastodon::DimensionsValidationError => e
@@ -114,15 +130,23 @@ class Form::AdminSettings
     return false unless errors.empty? && valid?
 
     KEYS.each do |key|
-      next unless instance_variable_defined?("@#{key}")
+      next if PSEUDO_KEYS.include?(key) || !instance_variable_defined?(:"@#{key}")
 
       if UPLOAD_KEYS.include?(key)
         public_send(key).save
       else
         setting = Setting.where(var: key).first_or_initialize(var: key)
-        setting.update(value: typecast_value(key, instance_variable_get("@#{key}")))
+        setting.update(value: typecast_value(key, instance_variable_get(:"@#{key}")))
       end
     end
+  end
+
+  def flavour_and_skin
+    "#{Setting.flavour}/#{Setting.skin}"
+  end
+
+  def flavour_and_skin=(value)
+    @flavour, @skin = value.split('/', 2)
   end
 
   private
@@ -139,9 +163,9 @@ class Form::AdminSettings
 
   def validate_site_uploads
     UPLOAD_KEYS.each do |key|
-      next unless instance_variable_defined?("@#{key}")
+      next unless instance_variable_defined?(:"@#{key}")
 
-      upload = instance_variable_get("@#{key}")
+      upload = instance_variable_get(:"@#{key}")
       next if upload.valid?
 
       upload.errors.each do |error|

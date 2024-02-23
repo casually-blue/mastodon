@@ -32,7 +32,7 @@ class BackupService < BaseService
       add_comma = true
 
       file.write(statuses.map do |status|
-        item = serialize_payload(ActivityPub::ActivityPresenter.from_status(status), ActivityPub::ActivitySerializer)
+        item = serialize_payload(ActivityPub::ActivityPresenter.from_status(status), ActivityPub::ActivitySerializer, allow_local_only: true)
         item.delete('@context')
 
         unless item[:type] == 'Announce' || item[:object][:attachment].blank?
@@ -72,7 +72,7 @@ class BackupService < BaseService
   end
 
   def dump_media_attachments!(zipfile)
-    MediaAttachment.attached.where(account: account).reorder(nil).find_in_batches do |media_attachments|
+    MediaAttachment.attached.where(account: account).find_in_batches do |media_attachments|
       media_attachments.each do |m|
         path = m.file&.path
         next unless path
@@ -177,7 +177,8 @@ class BackupService < BaseService
     ActiveModelSerializers::SerializableResource.new(
       object,
       serializer: serializer,
-      adapter: ActivityPub::Adapter
+      adapter: ActivityPub::Adapter,
+      allow_local_only: true
     ).as_json
   end
 

@@ -10,7 +10,7 @@ RSpec.describe FeedManager do
     end
   end
 
-  it 'tracks at least as many statuses as reblogs', skip_stub: true do
+  it 'tracks at least as many statuses as reblogs', :skip_stub do
     expect(FeedManager::REBLOG_FALLOFF).to be <= FeedManager::MAX_ITEMS
   end
 
@@ -130,6 +130,13 @@ RSpec.describe FeedManager do
 
       it 'returns true for status by followee mentioning blocked account' do
         bob.block!(jeff)
+        bob.follow!(alice)
+        status = PostStatusService.new.call(alice, text: 'Hey @jeff')
+        expect(described_class.instance.filter?(:home, status, bob)).to be true
+      end
+
+      it 'returns true for status by followee mentioning muted account' do
+        bob.mute!(jeff)
         bob.follow!(alice)
         status = PostStatusService.new.call(alice, text: 'Hey @jeff')
         expect(described_class.instance.filter?(:home, status, bob)).to be true

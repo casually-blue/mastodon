@@ -37,6 +37,7 @@ namespace :api, format: false do
     end
 
     namespace :timelines do
+      resource :direct, only: :show, controller: :direct
       resource :home, only: :show, controller: :home
       resource :public, only: :show, controller: :public
       resources :tag, only: :show
@@ -50,6 +51,12 @@ namespace :api, format: false do
     resources :suggestions, only: [:index, :destroy]
     resources :scheduled_statuses, only: [:index, :show, :update, :destroy]
     resources :preferences, only: [:index]
+
+    resources :annual_reports, only: [:index] do
+      member do
+        post :read
+      end
+    end
 
     resources :announcements, only: [:index] do
       scope module: :announcements do
@@ -144,9 +151,10 @@ namespace :api, format: false do
       end
     end
 
-    resources :notifications, only: [:index, :show] do
+    resources :notifications, only: [:index, :show, :destroy] do
       collection do
         post :clear
+        delete :destroy_multiple
       end
 
       member do

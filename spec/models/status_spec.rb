@@ -166,7 +166,7 @@ RSpec.describe Status do
 
   describe '#replies_count' do
     it 'is the number of replies' do
-      reply = Fabricate(:status, account: bob, thread: subject)
+      Fabricate(:status, account: bob, thread: subject)
       expect(subject.replies_count).to eq 1
     end
 
@@ -202,6 +202,43 @@ RSpec.describe Status do
     it 'is the source status for reblogs' do
       subject.reblog = other
       expect(subject.proper).to eq other
+    end
+  end
+
+  describe 'on create' do
+    subject { described_class.new }
+
+    let(:local_account) { Fabricate(:account, username: 'local', domain: nil) }
+    let(:remote_account) { Fabricate(:account, username: 'remote', domain: 'example.com') }
+
+    describe 'on a status that ends with the local-only emoji' do
+      before do
+        subject.text = "A toot #{subject.local_only_emoji}"
+      end
+
+      context 'when the status originates from this instance' do
+        before do
+          subject.account = local_account
+        end
+
+        it 'is marked local-only' do
+          subject.save!
+
+          expect(subject).to be_local_only
+        end
+      end
+
+      context 'when the status is remote' do
+        before do
+          subject.account = remote_account
+        end
+
+        it 'is not marked local-only' do
+          subject.save!
+
+          expect(subject).to_not be_local_only
+        end
+      end
     end
   end
 
@@ -253,6 +290,56 @@ RSpec.describe Status do
     end
   end
 
+  describe '.as_direct_timeline' do
+    subject(:results) { described_class.as_direct_timeline(account) }
+
+    let(:account) { Fabricate(:account) }
+    let(:followed) { Fabricate(:account) }
+    let(:not_followed) { Fabricate(:account) }
+
+    let!(:self_public_status) { Fabricate(:status, account: account, visibility: :public) }
+    let!(:self_direct_status) { Fabricate(:status, account: account, visibility: :direct) }
+    let!(:followed_public_status) { Fabricate(:status, account: followed, visibility: :public) }
+    let!(:followed_direct_status) { Fabricate(:status, account: followed, visibility: :direct) }
+    let!(:not_followed_direct_status) { Fabricate(:status, account: not_followed, visibility: :direct) }
+
+    before do
+      account.follow!(followed)
+    end
+
+    it 'does not include public statuses from self' do
+      expect(results).to_not include(self_public_status)
+    end
+
+    it 'includes direct statuses from self' do
+      expect(results).to include(self_direct_status)
+    end
+
+    it 'does not include public statuses from followed' do
+      expect(results).to_not include(followed_public_status)
+    end
+
+    it 'does not include direct statuses not mentioning recipient from followed' do
+      expect(results).to_not include(followed_direct_status)
+    end
+
+    it 'does not include direct statuses not mentioning recipient from non-followed' do
+      expect(results).to_not include(not_followed_direct_status)
+    end
+
+    it 'includes direct statuses mentioning recipient from followed' do
+      Fabricate(:mention, account: account, status: followed_direct_status)
+      results2 = described_class.as_direct_timeline(account)
+      expect(results2).to include(followed_direct_status)
+    end
+
+    it 'includes direct statuses mentioning recipient from non-followed' do
+      Fabricate(:mention, account: account, status: not_followed_direct_status)
+      results2 = described_class.as_direct_timeline(account)
+      expect(results2).to include(not_followed_direct_status)
+    end
+  end
+
   describe '.tagged_with' do
     let(:tag_cats) { Fabricate(:tag, name: 'cats') }
     let(:tag_dogs) { Fabricate(:tag, name: 'dogs') }
@@ -265,17 +352,29 @@ RSpec.describe Status do
 
     context 'when given one tag' do
       it 'returns the expected statuses' do
-        expect(described_class.tagged_with([tag_cats.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_cats.id, status_with_all_tags.id)
-        expect(described_class.tagged_with([tag_dogs.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_dogs.id, status_with_all_tags.id)
-        expect(described_class.tagged_with([tag_zebras.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_tagged_with_zebras.id, status_with_all_tags.id)
+        expect(described_class.tagged_with([tag_cats.id]))
+          .to include(status_with_tag_cats, status_with_all_tags)
+          .and not_include(status_without_tags)
+        expect(described_class.tagged_with([tag_dogs.id]))
+          .to include(status_with_tag_dogs, status_with_all_tags)
+          .and not_include(status_without_tags)
+        expect(described_class.tagged_with([tag_zebras.id]))
+          .to include(status_tagged_with_zebras, status_with_all_tags)
+          .and not_include(status_without_tags)
       end
     end
 
     context 'when given multiple tags' do
       it 'returns the expected statuses' do
-        expect(described_class.tagged_with([tag_cats.id, tag_dogs.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_cats.id, status_with_tag_dogs.id, status_with_all_tags.id)
-        expect(described_class.tagged_with([tag_cats.id, tag_zebras.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_cats.id, status_tagged_with_zebras.id, status_with_all_tags.id)
-        expect(described_class.tagged_with([tag_dogs.id, tag_zebras.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_dogs.id, status_tagged_with_zebras.id, status_with_all_tags.id)
+        expect(described_class.tagged_with([tag_cats.id, tag_dogs.id]))
+          .to include(status_with_tag_cats, status_with_tag_dogs, status_with_all_tags)
+          .and not_include(status_without_tags)
+        expect(described_class.tagged_with([tag_cats.id, tag_zebras.id]))
+          .to include(status_with_tag_cats, status_tagged_with_zebras, status_with_all_tags)
+          .and not_include(status_without_tags)
+        expect(described_class.tagged_with([tag_dogs.id, tag_zebras.id]))
+          .to include(status_with_tag_dogs, status_tagged_with_zebras, status_with_all_tags)
+          .and not_include(status_without_tags)
       end
     end
   end
@@ -292,17 +391,26 @@ RSpec.describe Status do
 
     context 'when given one tag' do
       it 'returns the expected statuses' do
-        expect(described_class.tagged_with_all([tag_cats.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_cats.id, status_with_all_tags.id)
-        expect(described_class.tagged_with_all([tag_dogs.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_dogs.id, status_with_all_tags.id)
-        expect(described_class.tagged_with_all([tag_zebras.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_tagged_with_zebras.id)
+        expect(described_class.tagged_with_all([tag_cats.id]))
+          .to include(status_with_tag_cats, status_with_all_tags)
+          .and not_include(status_without_tags)
+        expect(described_class.tagged_with_all([tag_dogs.id]))
+          .to include(status_with_tag_dogs, status_with_all_tags)
+          .and not_include(status_without_tags)
+        expect(described_class.tagged_with_all([tag_zebras.id]))
+          .to include(status_tagged_with_zebras)
+          .and not_include(status_without_tags)
       end
     end
 
     context 'when given multiple tags' do
       it 'returns the expected statuses' do
-        expect(described_class.tagged_with_all([tag_cats.id, tag_dogs.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_all_tags.id)
-        expect(described_class.tagged_with_all([tag_cats.id, tag_zebras.id]).reorder(:id).pluck(:id).uniq).to eq []
-        expect(described_class.tagged_with_all([tag_dogs.id, tag_zebras.id]).reorder(:id).pluck(:id).uniq).to eq []
+        expect(described_class.tagged_with_all([tag_cats.id, tag_dogs.id]))
+          .to include(status_with_all_tags)
+        expect(described_class.tagged_with_all([tag_cats.id, tag_zebras.id]))
+          .to eq []
+        expect(described_class.tagged_with_all([tag_dogs.id, tag_zebras.id]))
+          .to eq []
       end
     end
   end
@@ -319,17 +427,29 @@ RSpec.describe Status do
 
     context 'when given one tag' do
       it 'returns the expected statuses' do
-        expect(described_class.tagged_with_none([tag_cats.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_dogs.id, status_tagged_with_zebras.id, status_without_tags.id)
-        expect(described_class.tagged_with_none([tag_dogs.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_cats.id, status_tagged_with_zebras.id, status_without_tags.id)
-        expect(described_class.tagged_with_none([tag_zebras.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_cats.id, status_with_tag_dogs.id, status_without_tags.id)
+        expect(described_class.tagged_with_none([tag_cats.id]))
+          .to include(status_with_tag_dogs, status_tagged_with_zebras, status_without_tags)
+          .and not_include(status_with_all_tags)
+        expect(described_class.tagged_with_none([tag_dogs.id]))
+          .to include(status_with_tag_cats, status_tagged_with_zebras, status_without_tags)
+          .and not_include(status_with_all_tags)
+        expect(described_class.tagged_with_none([tag_zebras.id]))
+          .to include(status_with_tag_cats, status_with_tag_dogs, status_without_tags)
+          .and not_include(status_with_all_tags)
       end
     end
 
     context 'when given multiple tags' do
       it 'returns the expected statuses' do
-        expect(described_class.tagged_with_none([tag_cats.id, tag_dogs.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_tagged_with_zebras.id, status_without_tags.id)
-        expect(described_class.tagged_with_none([tag_cats.id, tag_zebras.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_dogs.id, status_without_tags.id)
-        expect(described_class.tagged_with_none([tag_dogs.id, tag_zebras.id]).reorder(:id).pluck(:id).uniq).to contain_exactly(status_with_tag_cats.id, status_without_tags.id)
+        expect(described_class.tagged_with_none([tag_cats.id, tag_dogs.id]))
+          .to include(status_tagged_with_zebras, status_without_tags)
+          .and not_include(status_with_all_tags)
+        expect(described_class.tagged_with_none([tag_cats.id, tag_zebras.id]))
+          .to include(status_with_tag_dogs, status_without_tags)
+          .and not_include(status_with_all_tags)
+        expect(described_class.tagged_with_none([tag_dogs.id, tag_zebras.id]))
+          .to include(status_with_tag_cats, status_without_tags)
+          .and not_include(status_with_all_tags)
       end
     end
   end

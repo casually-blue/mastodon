@@ -28,7 +28,7 @@ class REST::InstanceSerializer < ActiveModel::Serializer
       }
     else
       {
-        url: full_pack_url('media/images/preview.png'),
+        url: frontend_asset_url('images/preview.png'),
       }
     end
   end
@@ -48,6 +48,10 @@ class REST::InstanceSerializer < ActiveModel::Serializer
         status: object.status_page_url,
       },
 
+      vapid: {
+        public_key: Rails.configuration.x.vapid_public_key,
+      },
+
       accounts: {
         max_featured_tags: FeaturedTag::LIMIT,
       },
@@ -56,6 +60,7 @@ class REST::InstanceSerializer < ActiveModel::Serializer
         max_characters: StatusLengthValidator::MAX_CHARS,
         max_media_attachments: 4,
         characters_reserved_per_url: StatusLengthValidator::URL_PLACEHOLDER_CHARS,
+        supported_mime_types: HtmlAwareFormatter::STATUS_MIME_TYPES,
       },
 
       media_attachments: {

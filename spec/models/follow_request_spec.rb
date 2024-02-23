@@ -21,12 +21,24 @@ RSpec.describe FollowRequest do
     end
 
     it 'calls Account#follow!, MergeWorker.perform_async, and #destroy!' do
-      expect(account).to receive(:follow!).with(target_account, reblogs: true, notify: false, uri: follow_request.uri, languages: nil, bypass_limit: true) do
+      allow(account).to receive(:follow!) do
         account.active_relationships.create!(target_account: target_account)
       end
-      expect(MergeWorker).to receive(:perform_async).with(target_account.id, account.id)
-      expect(follow_request).to receive(:destroy!)
+      allow(MergeWorker).to receive(:perform_async)
+      allow(follow_request).to receive(:destroy!)
+
       follow_request.authorize!
+
+      expect(account).to have_received(:follow!).with(target_account, reblogs: true, notify: false, uri: follow_request.uri, languages: nil, bypass_limit: true)
+      expect(MergeWorker).to have_received(:perform_async).with(target_account.id, account.id)
+      expect(follow_request).to have_received(:destroy!)
+    end
+
+    it 'generates a Follow' do
+      follow_request = Fabricate.create(:follow_request)
+      follow_request.authorize!
+      target = follow_request.target_account
+      expect(follow_request.account.following?(target)).to be true
     end
 
     it 'correctly passes show_reblogs when true' do

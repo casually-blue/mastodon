@@ -9,13 +9,17 @@ module FormattingHelper
     TextFormatter.new(text, options).to_s
   end
 
+  def url_for_preview_card(preview_card)
+    preview_card.url
+  end
+
   def extract_status_plain_text(status)
     PlainTextFormatter.new(status.text, status.local?).to_s
   end
   module_function :extract_status_plain_text
 
   def status_content_format(status)
-    html_aware_format(status.text, status.local?, preloaded_accounts: [status.account] + (status.respond_to?(:active_mentions) ? status.active_mentions.map(&:account) : []))
+    html_aware_format(status.text, status.local?, preloaded_accounts: [status.account] + (status.respond_to?(:active_mentions) ? status.active_mentions.map(&:account) : []), content_type: status.content_type)
   end
 
   def rss_status_content_format(status)
